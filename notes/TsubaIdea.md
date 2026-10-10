@@ -743,7 +743,97 @@ References: [jev-use][jevu], [reference][jevu-ref],
 
 ### S006: jev-skill 💡
 
-https://github.com/wuyoscar/jev-skill
+A community collection of Jev use-case skills for coding agents — a catalogue
+of what an agent can hand to a judgment model, and a skill-based delivery
+mechanism, rather than a tool-call gate.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C002, C008, C014, C015, C016
+
+Supporting analysis for Tsuba's harness-extension form factor (C002), generic
+tool assessment (C008), assessment method (C014), the third-party-assessment-
+tool option (C015), and the low-cost-AI-with-a-prompt option (C016); it does
+not make the choice.
+
+Unlike the other studies it is not a gate: it does not gate tool calls and is
+not a security boundary. Its value to Tsuba is different in kind — it
+enumerates the *kinds of decisions* an agent can delegate to a classifier, and
+it demonstrates the advisory skill form factor next to the enforcing hook form
+factor the other studies use.
+
+**Shape.** The project is a curated "awesome" collection: five installable
+skills (`jev`, `jev-triage`, `jev-documents`, `jev-eval`, `jev-act`), 108
+scenarios, and 66 linked community projects and models. The division of labour
+is the same as S005: Jev chooses, classifies and scores through its three
+typed primitives (`noul` yes/no, `choice`, `score`), while the agent supplies
+the evidence and takes the action. It installs as agent skills into Codex,
+Claude Code, and OpenCode, and also ships an optional CLI (`jev-decide`). The
+skill is *instructional*: it teaches the agent when and how to consult the
+model, and the agent decides whether to comply.
+
+**Decision taxonomy (C008).** The collection is effectively a catalogue of
+candidate assessment dimensions, several of which bear on gating rather than
+on the destructive-command checks the other studies focus on: action-risk
+triage, plan-versus-action consistency (is this call consistent with the
+stated plan?), test-weakening / reward-gaming detection ("does this edit
+weaken a required check?"), suspicious tool-output instructions, completion-
+evidence checks (does the evidence support the success claim?), goal-drift
+checkpoints, and stuck-loop recovery. This broadens "tool assessment" beyond
+"is this command destructive?" toward intent-conformance and self-report
+honesty — dimensions Tsuba could consider for C008.
+
+**Skill versus hook (C002).** The collection delivers its guidance as a skill:
+the prompt pattern tells the agent to consult Jev "when failures repeat, a
+route needs choosing, or you are about to claim completion," and to leave
+trivial steps alone. This is the advisory pole of the harness-extension form
+factor, where the enforcement (the other studies' hooks and extensions) is
+separate. For Tsuba it suggests a possible split: enforcement stays in the
+harness hook, while a companion skill carries the policy and the places the
+model should *expect* to be gated.
+
+**Calibration pitfalls (C014 / C016).** The pitfalls guide is a useful
+counterweight to a naive classifier layer: distinguish probability,
+confidence, and score rather than acting on any number above a fixed 0.9;
+keep every answer and measure repeatability separately from accuracy against
+independent labels; supply *enough* context, not the largest context; treat
+missing evidence as unknown; and treat saved judgments as expiring when the
+evidence, question, or policy version changes. A reported pilot had Jev match
+24/24 preassigned labels against DeepSeek's 23/24 on a 24-record synthetic
+set, but the authors state plainly that it did not establish production
+accuracy or calibration.
+
+**Safety posture.** The setup skill asks the user to choose a real Jev service
+(OpenRouter or TypeSafe) or an explicit simulation, never switches between
+them silently, never asks for a key in chat, and verifies offline before any
+paid call. A simulation is labelled (`jev_called: false`, null probabilities)
+and the agent is told not to invent numbers — a small but relevant precedent
+for a classifier-backed tool that must stay honest about whether a verdict was
+really produced.
+
+**Trust and limits.** It is not a security boundary; the collection lists
+community projects without claiming to have installed or tested them, and Jev
+is an external service that receives the judged state. Nothing here enforces a
+block.
+
+**Bearings for Tsuba.** Three takeaways. First, the decision taxonomy gives
+C008/C014 candidate assessment dimensions beyond destructive commands —
+plan-vs-action consistency, self-report honesty, and test-weakening — that a
+Tsuba gate could flag even when no command is dangerous. Second, the
+skill-versus-hook distinction is worth keeping explicit: Tsuba enforces in the
+harness, but an advisory skill could carry the policy the model should follow
+and the expectation that certain calls will be gated. Third, the calibration
+discipline (separate probability / confidence / score, calibrate locally
+against independent labels, treat saved verdicts as expiring) is directly
+applicable to Tsuba's classifier method and to how it evaluates that method.
+
+References: [jev-skill][jevs], [general skill][jevs-jev],
+[pitfalls][jevs-pitfalls], [installation][jevs-install].
+
+[jevs]: https://github.com/wuyoscar/jev-skill
+[jevs-jev]: https://github.com/wuyoscar/jev-skill/blob/main/skills/jev/SKILL.md
+[jevs-pitfalls]: https://github.com/wuyoscar/jev-skill/blob/main/skills/jev/references/pitfalls.md
+[jevs-install]: https://github.com/wuyoscar/jev-skill/blob/main/docs/install.md
 
 ### S007: pi-jev 💡
 
