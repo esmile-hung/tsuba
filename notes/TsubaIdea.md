@@ -953,6 +953,194 @@ References: [pi-jev][pj].
 
 [pj]: https://github.com/y0usaf/pi-jev
 
+### S008: jev-shield 💡
+
+An MCP-layer semantic firewall — a ready-made gate *tool* that screens every
+tool call, tool result, and tool description through Jev and enforces with
+deterministic rules, a semantic battery, and session taint tracking.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C002, C003, C004, C005, C008, C014, C015, C016
+
+Supporting analysis for Tsuba's harness-extension form factor (C002), the
+Claude Code / OpenCode / Codex integrations (C004 / C003 / C005), generic tool
+assessment (C008), assessment method (C014), the third-party-assessment-tool
+option (C015), and the low-cost-AI-with-a-prompt option (C016); it does not
+make the choice.
+
+Unlike the other studies, this one is not a component Tsuba would assemble — it
+is a finished product that overlaps Tsuba's target: an existing gate. It is the
+strongest "adopt versus build" data point in the set.
+
+**Shape.** A proxy that sits between any MCP client and any stdio MCP server and
+screens every `tools/list` description, every `tools/call`, and every tool
+result. It returns calibrated probabilities and leaves policy to the caller.
+It ships in three forms: the MCP firewall itself (`npx jev-shield -- <upstream>`),
+a cooperative agent skill (`/verify`, which screens text on demand), and an
+*opt-in* hook/plugin layer for tool-by-tool enforcement. The enforcement layers,
+not the skill, are what make it a gate.
+
+**Three layers of control.** Structural (deterministic, free): recipient
+allowlists and required flags from config. Semantic (Jev, one call per event,
+~$0.00003, ~500 ms): exfiltration, destructive actions, injection-in-arguments,
+credential/payload sensitivity, tool-result injection, secrets-in-results, and
+tool-description poisoning. Session (taint tracking, free): after a result is
+flagged, subsequent calls are verified under an escalated policy. The bundled
+demo exercised ten verifications for $0.0003 at a median 558 ms.
+
+**Enforcement surfaces.** Claude Code `PreToolUse` returns `deny`/`ask` before
+`Bash`/`Write`/`Edit`/`WebFetch`/MCP tools and `PostToolUse` flags poisoned
+results; an OpenCode plugin throws from `tool.execute.before` to block and
+withholds injected results in `tool.execute.after`; Codex has no hook API so it
+is enforced through the MCP firewall wrapper. `JEV_HOOK_OFF=1` is a kill
+switch, `JEV_FAIL_MODE=closed` fails closed (default is open), and local reads
+(`Read`/`Grep`/`Glob`) are exempt. **It does not cover Pi.**
+
+**Policy is code, not a prompt.** `config/policies.json` holds thresholds
+(`review` 0.35, `action` 0.7, `severity_block` 2.0), `hazard_actions`
+(`data_exfiltration`/`destructive_action` → `block`), `fail_mode`, and per-tool
+rules (`recipient_allowlist`, `require_flag`). The README's framing — probabilities
+are fixed, thresholds decide the action, "change policy in code review, not in a
+prompt" — is the same separation of mechanism and policy Tsuba needs.
+
+**What the demo catches.** A poisoned tool description is flagged
+(`tool_poisoning` 0.9x); an injection inside a search result is *redacted before
+the agent reads it* (`contains_injection` 0.98); a novel-phrasing exfiltration
+that slips past the allowlist is still blocked (`payload_sensitivity` 0.98); a
+destructive call is blocked by severity escalation (2.11 ≥ 2.0); a
+secret-bearing result is redacted (`contains_secrets` 0.97); a legitimate email
+to an allowed recipient passes — a semantics-not-keywords demonstration.
+
+**Trust and limits.** It states plainly that it is "not a security boundary" —
+a probabilistic signal layer on top of sandboxing, least privilege, and human
+approval, evadable by a determined attacker, adding ~0.5–1.3 s per call, with a
+~32k-token state budget that forces truncation of large outputs. It depends on
+TypeSafe access through Vercel AI Gateway, and its enforcement paths exclude Pi.
+
+**Bearings for Tsuba.** First, this is the most direct adopt-versus-build
+candidate: a finished gate (C015) already doing MCP-level screening and
+harness enforcement across Claude Code, OpenCode, and Codex, so Tsuba's
+differentiation would have to be the Pi / Oh My Pi coverage (C006) and whatever
+it does beyond a Jev-based signal. Second, its three-layer model — a
+deterministic structural floor, a semantic battery, and session taint tracking —
+is a concrete C008 architecture richer than single-question classification, and
+taint-escalation after a flagged result is a dimension Tsuba's pre-call-only
+assessment lacks. Third, the strict policy-in-code split is worth copying
+verbatim in spirit. Fourth, its honest "signal, not boundary" stance and its Pi
+absence together define exactly what adopting it would and would not buy.
+
+References: [jev-shield][jsh].
+
+[jsh]: https://github.com/caiovicentino/jev-shield
+
+### S009: jev-mcp 💡
+
+An MCP server exposing twelve Jev judgment tools, plus a documented
+`PreToolUse` hook gate that turns one `jev_decide` call into a policy-driven
+tool-call gate across Claude Code, Codex, OpenCode, and Pi.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C002, C003, C004, C005, C006, C008, C014, C015, C016
+
+Supporting analysis for Tsuba's harness-extension form factor (C002), the
+Claude Code / OpenCode / Codex / Pi integrations (C004 / C003 / C005 / C006),
+generic tool assessment (C008), assessment method (C014), the
+third-party-assessment-tool option (C015), and the low-cost-AI-with-a-prompt
+option (C016); it does not make the choice.
+
+It matters to Tsuba twice over: it uses "gate" in two distinct senses — a
+completion gate *tool* (`jev_gate`) and a tool-call gate *hook* — and the hook
+recipe ships an adapter for Pi, the integration Tsuba targets.
+
+**Shape.** An MCP server (`npx -y @jkudish/jev-mcp`) offering twelve tools that
+return typed probabilities in roughly 150–500 ms for a fraction of a cent. It
+registers with Claude Code, Codex, OpenCode, Amp, and generic MCP clients
+(stdio, or stateless HTTP for a shared/remote server), and can be embedded
+in-process via a side-effect-free `createServer()`. It ships an agent skill that
+teaches the agent when to reach for each tool — the "registered-but-unused"
+problem the whole class of MCP tools faces.
+
+**Tool taxonomy (C008).** The suite is a menu of assessment dimensions:
+`jev_verify` (each cited claim against evidence, per-claim verdict, full
+distribution, confidence, plus a `same_subject` question so a contradiction
+only stands when the evidence is about the same thing), `jev_screen`
+(prompt-injection / substance / relevance *before content enters context*,
+returning an advisory `pass`/`review`/`block`/`skip` and never blocking
+itself), `jev_find` and `jev_rerank` (selection by meaning, no embeddings),
+`jev_classify` (batched labeling, auto only when probability ≥ 0.85 *and*
+winner margin ≥ 0.5), `jev_decide` (a bounded 2–6-way choice with
+`ask_user`/`investigate`/`none` escape hatches and per-requirement checks),
+`jev_compare`, `jev_extract` (regex candidates; the model picks a verbatim
+match and never writes a value), `jev_audit` (a failure-mode battery —
+hallucinated / off-target / incomplete / format — max-gated so one fired flag
+cannot be diluted), `jev_review` (four 0–2 rubrics plus a `safe_to_apply`
+probability combined into a composite and one `auto`/`review`/`escalate`), and
+`jev_gate` (`jev_review` plus completion-claim verification in one call).
+
+**The completion gate.** `jev_gate` is not a tool-call gate: it gates a *done*
+claim. It is `auto` only when the patch review is accepted *and* every "tests
+pass" claim is verified against supplied evidence; a confidently contradicted
+claim escalates. It is the sharpest expression in the set of self-report honesty
+as an assessment dimension — catching exactly the success claim an agent is most
+tempted to hand-wave.
+
+**The hook gate (the tool-call gate).** `examples/hook-gate.md` wires a
+`PreToolUse` hook to one `jev_decide` call: candidates `proceed`/`block`,
+escape hatches on, the policy in the `priorities` field, and the tool call
+framed as untrusted facts. The routing discipline is the reusable part —
+the harness matcher is the free router; local `--skip` regexes and a
+4,000-character size cap defer at zero cost (exit 0, so the harness's own flow
+applies); one model call judges only what matched; and a verdict is emitted
+*only* on a confident, valid judgment (`deny` needs `block` selected at or above
+`--block-threshold`, default 0.85). Provider errors, timeouts,
+`invalid_response`, and escapes all defer, and `proceed` always defers — the
+gate never fabricates an allow.
+
+**Cross-harness wiring.** The same runner serves Claude Code and Codex (shared
+`PreToolUse` JSON on stdin, `hookSpecificOutput.permissionDecision` on stdout).
+OpenCode intercepts in-process via a plugin that throws from
+`tool.execute.before` (with the caveat that it has not always fired for MCP
+calls); **Pi** intercepts via an extension returning `{ block, reason }` from
+the `tool_call` event. `--ask` maps the `ask_user` escape to `ask`, supported on
+Claude Code only.
+
+**Honesty and calibration.** The README states that a policy gate is not a
+security boundary, that the tool-call text is untrusted input framed as facts
+(framing is mitigation, not a guarantee), and that deferring is not approval. It
+prescribes a reproducible threshold experiment — capture real payloads, label
+each `allow`/`block`/`unsure`, sweep `--block-threshold`, count false denies and
+misses, pin `JEV_MCP_MODEL` — and notes ~1 s per judged call, which is why the
+matcher and skip layers exist.
+
+**Trust and limits.** Providers are pluggable (TypeSafe / OpenRouter /
+Cloudflare / Vercel / compatible); inputs leave the environment. It notes that
+confidence measures how peaked a choice distribution is, not the probability the
+answer is correct, so thresholds are starting points to tune against your own
+traffic. Typed output guarantees the interface, not the truth.
+
+**Bearings for Tsuba.** First, the hook gate is the closest published recipe to
+Tsuba's own enforcement shape, and it is the only listed tool with a ready Pi
+adapter (C006) alongside Claude Code, Codex, and OpenCode — directly usable as
+the gate mechanism (C002). Second, its routing and its "deny only on
+confidence, otherwise defer, never auto-allow" principle are the clearest
+statement of a fail direction, and are worth adopting over S007's fail-open /
+fail-closed binary. Third, its eleven non-gate tools are a menu of C008
+dimensions well beyond destructive-command checks — injection screening,
+fabrication auditing, diff blast-radius review, claim verification — several
+judging text and results rather than the call, extending assessment past the
+pre-call boundary. Fourth, its validation strictness (`invalid_response`,
+probability-and-margin gates, confidence floors, max-gated audit) and its
+"measure your own traffic, pin the model" stance reinforce the calibration
+discipline in S006 and S007.
+
+References: [jev-mcp][jm], [hook gate][jmh], [skill][jms].
+
+[jm]: https://github.com/jkudish/jev-mcp
+[jmh]: https://github.com/jkudish/jev-mcp/blob/main/examples/hook-gate.md
+[jms]: https://github.com/jkudish/jev-mcp/blob/main/skills/jev/SKILL.md
+
 
 ## Metaphor
 
