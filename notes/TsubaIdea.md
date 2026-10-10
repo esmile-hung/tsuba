@@ -278,6 +278,27 @@ stand-in so the harness plumbing can be exercised before a smarter method is
 wired in.
 
 
+## Prior arts
+
+Related work to study one by one; each study informs Tsuba's design.
+
+### S001: pi-automode 💡
+
+https://github.com/czottmann/pi-automode
+
+### S002: cc-safety-net 💡
+
+https://github.com/kenryu42/cc-safety-net
+
+### S003: pi-automode-classifier 💡
+
+https://github.com/deepu105/pi-automode-classifier
+
+### S004: pi-verdict 💡
+
+https://pi.dev/packages/pi-verdict
+
+
 ## Metaphor
 
 According to [Tsuba](https://en.wikipedia.org/wiki/Japanese_sword_mountings#Tsuba)
