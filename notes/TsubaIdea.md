@@ -837,7 +837,121 @@ References: [jev-skill][jevs], [general skill][jevs-jev],
 
 ### S007: pi-jev 💡
 
-https://github.com/y0usaf/pi-jev
+A Pi extension that uses Jev (TypeSafe) as a decision layer: a measured,
+calibrated tool-call gate plus a post-execution output judge, both fail-open.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C006, C008, C014, C015, C016
+
+Supporting analysis for Tsuba's Pi integration (C006), generic tool assessment
+(C008), assessment method (C014), the third-party-assessment-tool option
+(C015), and the low-cost-AI-with-a-prompt option (C016); it does not make the
+choice.
+
+It is the most direct reference in the set for a Pi auto-mode gate built on a
+third-party classifier: it gates Pi tool calls (C006) through Jev (C015/C016),
+and its calibration section is the most concrete treatment of how to turn a
+classifier's raw answers into thresholds.
+
+**Shape.** Jev answers *typed* questions about a piece of state — a `noul`
+yes/no as a probability, a `choice` as an option plus a distribution, a
+`score` as a position on ordered levels — and returns numbers the code
+branches on, so nothing parses prose. Three things use it: a gate judging
+`bash`, `write`, and `edit` calls before they run; an output judge reading what
+a `bash` call printed or a `codemode` script returned; and a `jev_ask` tool the
+model can call for the same kind of judgment itself. It is a Pi extension with
+no runtime dependencies, and without an API key it loads, says so once, and
+stays out of the way.
+
+**The gate.** Four questions go in one request (about 300 ms, versus four
+round trips): is the action destructive (`0.90`), does it send local data or
+secrets off-machine (`0.70`), does it affect anything beyond what the user
+asked for (`0.85`), and how much damage if unwanted (`score` over four levels,
+threshold `2.50`). Shadow mode is the default — a flagged call only notifies —
+and enforce mode asks for confirmation. Headless runs cannot prompt, so
+enforcement falls back to the warning unless `gate.blockWithoutUI` is set.
+
+**Fail-open and caching.** Every error path fails open: a missing key, a
+timeout, a 429, or a malformed response produces no verdict and the call
+proceeds, with errors rate-limited to once a minute so a dead endpoint cannot
+flood the transcript. Identical input is judged once per `cacheSeconds`
+(120), and sibling calls from one assistant message share a single in-flight
+request. This is the opposite of the fail-closed contract in S001 and S004 —
+a deliberate stance, mitigated by shipping in shadow mode.
+
+**Output judge.** The gate sees intent, not what a command printed, so the
+extension adds a post-execution judge over `tool_result`: does the output
+contain a secret or credential (`noul`, `0.90`) and what kind of failure is
+this (`choice` over six classes, confidence floor `0.60`). It appends one line
+of fixed advice from a table (retry `transient`, fix the environment for
+`environment`, fix the code for `code_bug`, do not retry `permission`, fix the
+invocation for `user_error`) and never blocks. This is an assessment placement
+beyond the pre-call focus of Tsuba and the other gates: a judgment about text
+that exists only after the call.
+
+**Codemode.** Under Pi 0.99 the model can run tools from a `codemode` script.
+The gate judges a `bash` call whether the model or a script made it (a blocked
+call fails inside the script), while the output judge reads the `codemode`
+result — what actually reaches the model — rather than the inner call results,
+so a script's intermediate output is left alone.
+
+**Calibration (C014).** The thresholds are measured rather than chosen, and
+the findings are the most transferable part of the study. An ordinary
+*requested* `sed -i` scored as high as `0.85` on `destructive`, so a `0.7`
+threshold would have prompted on every in-scope edit; `0.90` sits above the
+whole in-scope band and below the `0.99` a genuinely destructive command
+scored. `beyond_scope` cleanly separated in-scope (`0.10–0.74`) from
+out-of-scope (`0.90–0.98`), with the threshold mid-gap because the same state
+moved by ±0.05 between runs. Question wording mattered: an early destructive
+question asking whether data "cannot be recovered from version control" scored
+a real `rm -rf` plus force-push at `0.77`, under any useful threshold, because
+"it is in git" is a reasoning path the model takes; asking plainly whether the
+action is destructive separated the pair `0.03` against `0.99`. The output
+judge ran 53 fixtures three times each: the leak question had an empty gap
+(`≤0.02` against `≥0.92`) so `0.90` sits in it, and the failure classifier was
+right at confidence `0.88–1.00` and wrong once at `0.42`, which is why the
+floor is `0.60`. Two retry-shaped questions were dropped as overlapping, and
+the advice is derived from the class in code instead of asked. The author
+labels all of this a smoke calibration, not a labelled evaluation set — enough
+to reject wrong thresholds, not enough to leave shadow mode.
+
+**Privacy accounting.** The gate sends the working directory, the tool name,
+the last user message (first 1200 characters), and the tool's arguments to
+`api.typesafe.ai`; for `write` / `edit` those arguments contain file content,
+and for `codemode` they are the script source. Long strings are truncated with
+a marker (400 characters for arguments, 2000 for output), and the omitted text
+never leaves the machine — with `gate.tools: ["bash"]` file content stays out
+entirely. The key travels in the `Authorization` header, and notification text
+is scrubbed of it before reaching the transcript.
+
+**Journal.** Flagged verdicts are stored as Pi custom entries that never enter
+the LLM context and survive `/reload`, `/resume`, and `/fork`; reading them
+costs no Jev requests, and only flags are journaled.
+
+**Trust and limits.** It is not a sandbox. It fails open on every error, ships
+in shadow mode because the calibration is only a smoke test, and its
+thresholds are tuned to one model (`jev-latest`). Judging every `read` was
+explicitly avoided as one request per file opened.
+
+**Bearings for Tsuba.** Four takeaways. First, this is the closest template to
+Tsuba's likely Pi integration plus classifier (C006 + C015/C016), including
+how to lay out config (user + project, project wins) and a self-contained
+client. Second, its multi-dimension assessment (destructive / exfiltration /
+beyond-scope / impact) is a richer C008 breakdown than a single risk score, and
+the output judge shows assessment can extend past the pre-call boundary Tsuba
+currently targets. Third, the calibration method — measure real in-scope and
+out-of-scope bands and place the threshold in the gap, watch for question
+wording that lets the model reason the danger away, floor on confidence, batch
+the questions — is directly reusable for Tsuba's classifier and its evaluation
+(and pairs with the discipline S006 describes). Fourth, its explicit "what
+leaves the machine" accounting and truncation is a good model for Tsuba's
+privacy posture, and its fail-open choice is the opposite of S001/S004 — so
+Tsuba should decide its failure direction deliberately rather than by default.
+
+References: [pi-jev][pj].
+
+[pj]: https://github.com/y0usaf/pi-jev
 
 
 ## Metaphor
