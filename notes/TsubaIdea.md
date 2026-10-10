@@ -298,6 +298,18 @@ https://github.com/deepu105/pi-automode-classifier
 
 https://pi.dev/packages/pi-verdict
 
+### S005: jev-use 💡
+
+https://github.com/shitianfang/jev-use
+
+### S006: jev-skill 💡
+
+https://github.com/wuyoscar/jev-skill
+
+### S007: pi-jev 💡
+
+https://github.com/y0usaf/pi-jev
+
 
 ## Metaphor
 
