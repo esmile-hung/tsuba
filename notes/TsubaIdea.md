@@ -57,7 +57,16 @@ mechanisms.
 [opencode-plugin]: https://opencode.ai/docs/plugins/
 
 
-## C003: Auto mode on OpenCode 💡
+## C007: Harness integration 💡
+
+Each AI agent harness exposes its own extension mechanism for gating tool calls,
+so Tsuba's integration is developed and tracked per target harness.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C002
+
+### C003: Auto mode on OpenCode 💡
 
 OpenCode loads TypeScript plugins into its process and fires a
 `tool.execute.before` event before each tool call, giving Tsuba a
@@ -84,7 +93,7 @@ References: [OpenCode plugins][opencode-plugin], [OpenCode permissions][opencode
 [opencode-permissions]: https://opencode.ai/docs/permissions/
 
 
-## C004: Auto mode on Claude Code 💡
+### C004: Auto mode on Claude Code 💡
 
 Claude Code's built-in auto mode is backed by a Claude-only classifier, so a
 `PreToolUse` hook that classifies tool calls restores auto mode when a
@@ -110,7 +119,7 @@ References: [Claude Code plugins][claude-plugins], [Claude Code hooks][claude-ho
 [claude-permission-modes]: https://code.claude.com/docs/en/permission-modes
 
 
-## C005: Auto mode on Codex 💡
+### C005: Auto mode on Codex 💡
 
 Codex exposes `PreToolUse` hooks that can block or rewrite a tool call, giving
 Tsuba a model-agnostic gate for auto mode.
@@ -136,7 +145,7 @@ References: [Codex hooks][codex-hooks].
 [codex-hooks]: https://developers.openai.com/codex/hooks
 
 
-## C006: Auto mode on Pi / Oh My Pi 💡
+### C006: Auto mode on Pi / Oh My Pi 💡
 
 Pi and its Oh My Pi fork are minimal harnesses shaped by TypeScript extensions
 that can observe and block tool calls, which is where Tsuba gates auto mode.
