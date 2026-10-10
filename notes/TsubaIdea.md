@@ -351,7 +351,105 @@ References: [pi-automode][pi-automode],
 
 ### S002: cc-safety-net 💡
 
-https://github.com/kenryu42/cc-safety-net
+A deterministic, static pre-execution policy gate that blocks destructive
+commands and sensitive-file access before a tool call runs, shipped as thin
+adapters across many coding agent CLIs.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C003, C004, C005, C006, C014, C015
+
+Supporting analysis for Tsuba's per-harness integration (C003, C004, C005,
+C006), assessment method (C014), and third-party-assessment-tool option
+(C015); it does not make the choice.
+
+It parses each tool call before execution and denies the destructive ones,
+with no model in the loop. Its breadth — sixteen supported agents, four
+integration models — is a close reference for how Tsuba reaches each harness
+and for what a deterministic assessment layer looks like.
+
+**Shape.** CC Safety Net is not a classifier and not a sandbox. It reads a
+tool call, parses the command with its own POSIX and PowerShell parsers, and
+denies calls that match destructive-command or sensitive-path rules. It
+states plainly that it does not contain processes, set filesystem
+permissions, or filter egress, and it lists its residual bypasses (behaviour
+inside arbitrary binaries, `eval` and fetched code, interpreter long-form
+flags, a symlink TOCTOU window) as known limitations.
+
+**Integration.** It reaches sixteen agents through four models, which map
+directly onto Tsuba's harness-integration concepts. *Stdin hook subprocess* —
+the agent runs `cc-safety-net hook <flag>` per call and reads an
+agent-specific deny object from stdout — covers Claude Code (`PreToolUse`),
+Codex (`PreToolUse`), and nine others (C004, C005). *Agent-loaded plugin*
+covers OpenCode via the `@opencode-ai/plugin` contract and a
+`tool.execute.before` hook (C003). *In-process extension* covers Pi through
+`pi.on('tool_call')` (C006). *Event plugin* covers Amp Code. Each adapter
+only normalizes the payload shape and the deny format; the guard itself is
+shared, with no per-agent branch. It is also callable as a library
+(`checkCommand`) without installing a hook.
+
+**Guard pipeline.** Every call runs one fixed ordered sequence: bounded
+tool-input extraction (bounds fail closed), semantic facts, parser budget
+checks, **policy-file protection**, **Git-metadata protection**, policy
+snapshot load, **sensitive-path protection**, non-command allow, empty-command
+fail-closed, then destructive-command analysis. Two properties stand out.
+First, the always-on protections (policy files in both scopes, Git metadata)
+deny *before* the policy snapshot is loaded, so no preset or override can
+switch them off. Second, sensitive-path protection sits *after* the snapshot
+and is the only one of the hard-stop protections policy can tune. A thrown
+error anywhere in the guard becomes a fail-closed deny attributed to its
+stage; an invalid *configuration* source is dropped, not converted into a
+denial.
+
+**Assessment.** Stage 12 is the analyzer: it splits a command on shell
+operators, walks each segment, strips env assignments and known wrappers, and
+dispatches by head command to per-command analyzers (`git`, `rm` /
+`Remove-Item`, `find` / `xargs` / `parallel`, device tools), recursing into
+shell and interpreter bodies with a depth cap. It tracks `cd` / `pushd` and
+propagates environment assignments. This is the deterministic pole of C014:
+the opposite of S001's low-cost-model classifier (C016). Semantic parsing is
+chosen over wildcard deny rules precisely to resist flag reordering, shell
+wrapping, and interpreter hiding.
+
+**Policy.** Rules come from built-in rules, custom rulebooks (fetched and
+vendored, integrity-checked, strictly additive), and overrides. Three presets
+— standard, strict, paranoid — trade coverage for interruption, with separate
+capabilities (`fail_closed`, `paranoid_rm`, `paranoid_interpreters`). Secret
+protection runs before command analysis and covers shell, path, search, and
+patch shapes through a 138-rule built-in set plus configured deny paths, with
+a credential tier on by default. An agent's denial is phrased to keep it on
+task, carrying an intent that names a safer alternative.
+
+**Trust and limits.** `policy.json` is protected in both the user and project
+scopes (though the project chain stops at its own `.cc-safety-net` directory).
+Custom rules can only tighten, never loosen. Several hosts are fail-open by
+design (Grok Build, Factory Droid, Devin CLI), and per-host gaps are
+documented (Codex `write_stdin` and `workdir`, OpenClaw session cwd, DeepSeek
+Harness `run_code`). It positions itself as one layer in a defense-in-depth
+stack alongside deny rules and OS sandboxing, not a replacement for either.
+
+**Bearings for Tsuba.** Three takeaways. The four integration models are a
+ready map of how each target harness is reached (C003–C006), and its
+OpenCode/Pi coverage confirms those extension points are viable for a
+model-agnostic gate. Its fail-closed-on-guard-error / fail-open-on-config
+split, and the always-on-protections-before-config ordering, are policy
+shapes worth mirroring. And it is a concrete instance of the third-party
+assessment tool option (C015): Tsuba could depend on it as the deterministic
+layer rather than reimplement parsing, while a classifier (C016) handles the
+residue deterministic rules cannot judge.
+
+References: [cc-safety-net][ccsn], [architecture][ccsn-architecture],
+[integration architecture][ccsn-integration], [design principles][ccsn-design],
+[known limitations][ccsn-limits], [modes][ccsn-modes],
+[secret protection][ccsn-secret].
+
+[ccsn]: https://github.com/kenryu42/cc-safety-net
+[ccsn-architecture]: https://ccsafetynet.com/docs/guides/architecture
+[ccsn-integration]: https://ccsafetynet.com/docs/guides/integration-architecture
+[ccsn-design]: https://ccsafetynet.com/docs/guides/design-principles
+[ccsn-limits]: https://ccsafetynet.com/docs/guides/known-limitations
+[ccsn-modes]: https://ccsafetynet.com/docs/configuration/modes
+[ccsn-secret]: https://ccsafetynet.com/docs/reference/secret-protection
 
 ### S003: pi-automode-classifier 💡
 
