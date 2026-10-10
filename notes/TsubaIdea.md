@@ -284,7 +284,70 @@ Related work to study one by one; each study informs Tsuba's design.
 
 ### S001: pi-automode 💡
 
-https://github.com/czottmann/pi-automode
+Claude Code-style auto mode for Pi, built as an in-process guardrail
+extension that intercepts agent tool calls before execution.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C006, C014
+
+Supporting analysis for Tsuba's Pi integration (C006) and assessment
+design (C014); it does not make the choice.
+
+It hooks Pi's `tool_call` event and blocks a call on a deterministic
+rule, a hard-deny check, or a model classifier's verdict, driven by JSON
+configuration. Its guardrail shape is a close reference for the Pi
+integration Tsuba contemplates.
+
+**Pipeline.** Each call climbs an ordered ladder from certain-and-cheap
+to expensive: auto-mode-enabled check; cancelled-turn block;
+`permissions.deny` match (block locally, no model); `permissions.ask`
+match (ask the user — acceptance still forces classifier review);
+deterministic hard-deny checks; path-deny checks including symlink
+aliases and recursive-search scope; allow tiers
+(`allowInsideWorkingDirectory`, `permissions.allow`, and a read-only
+fast path over `read` / `grep` / `find` / `ls`); then the classifier
+sees whatever remains. Explainable rules decide first; the model only
+handles the residue.
+
+**Assessment.** The classifier is two-stage and fail-closed: a one-token
+filter returns exactly `0` (allow) or `1` (review), and only a `1`
+triggers a structured call that must return one internal
+`classifier_decision` tool call (`decision` allow/block; `tier`
+hard_deny/soft_deny/allow/explicit_intent/none; `reason`). Sampling is
+schema-constrained where the provider supports it, validated locally
+otherwise. Any failure — no model, provider error, timeout, context
+overflow, malformed output — blocks the call. The model is selectable
+and can run at low reasoning effort: this is the low-cost-AI-with-a-
+prompt assessment method (C016) in production.
+
+**Policy tiers.** Rules are graded — `hard_deny` unconditional,
+`soft_deny` overridable by an `allow` exception or explicit user intent,
+`allow` exceptions applying to soft denies only. Tool-level
+`permissions.deny` / `ask` / `allow` are separate from the prose policy
+and parse Bash through `unbash`, so a command chain cannot smuggle an
+uncovered command past an allow pattern.
+
+**Trust and limits.** Configuration is source-ranked, and a checked-in
+shared project file can only tighten auto mode, never loosen it. The
+extension states plainly that it is not a sandbox and does not guard the
+user's own `!` shell commands; Claude Code's real classifier and rules
+are private, so this reimplements the documented behaviour.
+
+**Bearings for Tsuba.** The deterministic-first/model-last ladder, the
+fail-closed contract, the cheap-filter → classifier split, and the
+per-generic-tool routing (read-only fast path vs. write/edit and shell
+through the model) map onto the tool-assessment (C008) and
+assessment-method (C014) concepts.
+
+References: [pi-automode][pi-automode],
+[classifier flow][pa-classifier-flow],
+[configuration][pa-configuration], [defaults][pa-defaults].
+
+[pi-automode]: https://github.com/czottmann/pi-automode
+[pa-classifier-flow]: https://github.com/czottmann/pi-automode/blob/main/docs/automode-classifier-flow.md
+[pa-configuration]: https://github.com/czottmann/pi-automode/blob/main/docs/configuration.md
+[pa-defaults]: https://github.com/czottmann/pi-automode/blob/main/docs/defaults.md
 
 ### S002: cc-safety-net 💡
 
