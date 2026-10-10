@@ -554,7 +554,102 @@ References: [pi-automode-classifier][pac].
 
 ### S004: pi-verdict 💡
 
-https://pi.dev/packages/pi-verdict
+A minimal Pi permission gate inspired by Claude Code's auto mode: a
+three-state verdict (allow / ask / deny) from a deterministic floor, user
+rules, then a context-aware classifier, fail-closed throughout.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C002, C006, C008, C014, C016, C017
+
+Supporting analysis for Tsuba's harness-extension form factor (C002), Pi
+integration (C006), generic tool assessment (C008), assessment method (C014),
+the low-cost-AI-with-a-prompt option (C016), and the keyword-catcher floor
+(C017); it does not make the choice.
+
+It is the third Pi auto-mode gate studied (after S001 and S003) and the one
+whose README explicitly documents how it *converged* with S001 on the same
+architecture — deny floor, then user rules, then classifier, fail-closed. Its
+additions over the others are worth weighing: a classifier that can itself
+return `ask`, a self-protection layer no configuration can disable, and a
+context-aware classifier rather than a command-only one.
+
+**Shape.** The core concept is the three-state *verdict*: `allow`, `deny`, or
+`ask` (routed to the human, degrading to `deny` in non-interactive sessions).
+The design goal is stated as safe automation, not maximum automation, because
+both approval fatigue and silent unsafe execution lose. It is a ~2k-line
+single-file extension with zero runtime dependencies. It is a permission gate,
+not a sandbox, and does not guard manual `!` shell escapes.
+
+**Pipeline.** Every call runs a fixed ladder. Stage 0 is self-protection
+(below). Stage 1 is the deterministic rule layer at zero latency: the built-in
+deny floor (bash danger regexes plus path sensitivity tiers S0–S5), user
+`allow` / `deny` regexes (deny beats allow, both beat the classifier),
+`denyPaths` (a declared protected path triggers a terminal ask before any user
+allow, and the classifier is told only that a protected path exists, never
+its name), and `ignoreTools` (declared uncovered tools pass with zero model
+calls). Stage 2 is the gray zone: nested codemode calls may be routed to
+rules-only, otherwise the call goes to the classifier. Stage 3 is the
+three-state adjudication. Any classifier exception, timeout (25s), or contract
+violation becomes a `deny`.
+
+**Assessment.** The classifier sees the *conversation context* — recent user
+intent plus prior tool calls — not just the command string, which is the key
+contrast with S003's command-only classifier. The default is "self-reflection"
+(the session model adjudicates); `classifierModel` pins another model, and
+`"typesafe/jev-latest"` opts into Pi's native `classify()` catalog (choice +
+probabilities + confidence). This is the low-cost-AI-with-a-prompt method
+(C016) again, but with two refinements: the model can emit `ask` as a verdict
+rather than only a risk score, and a confidence floor
+(`classifierMinConfidence`) with a fallback cascade (`classifierFallbackModel`)
+demotes low-confidence native verdicts to a deeper model or to the user,
+without ever auto-relaxing a demoted deny or ask. Design decisions are
+measurement-backed and the lab notes ship in-repo — e.g. a verdict cache was
+declined after replaying 1.2k real verdicts measured a 3.2% hit rate, and a
+tree-sitter rule engine was rejected after it absorbed zero gray-zone calls on
+746 real commands.
+
+**Self-protection.** The gate guards its own files (the config and installed
+extension copy) against in-process writes — reads pass, writes hard-deny, on
+the sudoers / visudo precedent that the owner's editor never passes through
+the gate. It is not disableable by any config, and tamper detection snapshots
+watched files at session start and re-verifies before every verdict, auto-
+restoring a changed extension copy and failing closed. This is a governance
+idea the earlier studies lack.
+
+**Trust and limits.** The path-sensitivity floor applies to file tools only,
+so `cat ~/.ssh/id_rsa` in bash goes to the classifier while `read
+~/.ssh/id_rsa` denies deterministically. On Windows the floor covers
+bash-shaped patterns only, so PowerShell destructive commands rely on the
+classifier. `denyPaths` bash extraction is token-level and obfuscatable
+(substitution, base64, external script contents, spaces in paths, recursive
+searches), which the author frames as acceptable because a hit routes to the
+human rather than deciding silently. There is deliberately no built-in
+allowlist — every "always allow" claim is the user's. AGENTS.md is not passed
+to the classifier as intent evidence.
+
+**Hosts.** It requires Pi ≥ 0.99 for the native classifier; older Pi and Oh My
+Pi keep a 0.12.x line that self-anchors to whichever agent tree it is
+installed in. That host-split install story is a concrete instance of the
+packaging difference Tsuba faces (C002) and the Pi / Oh My Pi pairing (C006).
+
+**Bearings for Tsuba.** The convergence with S001 is the strongest signal yet
+that the floor → rules → classifier → fail-closed shape is the settled design
+for a Pi auto-mode gate. Beyond that, three ideas extend Tsuba's concept set:
+a classifier permitted to return `ask` (so ambiguity is a first-class verdict,
+not a low score); self-protection of the gate's own configuration and code;
+and the confidence-floor-plus-fallback cascade for layering a fast classifier
+over a deeper one. It is also a concrete third-party tool for C015 and C016,
+and its regex deny floor is the C017 keyword-catcher idea used as the
+deterministic bottom layer.
+
+References: [pi-verdict][pv], [pi-verdict repo][pv-repo],
+[security principles][pv-security], [configuration][pv-config].
+
+[pv]: https://pi.dev/packages/pi-verdict
+[pv-repo]: https://github.com/jesset/pi-verdict
+[pv-security]: https://cdn.jsdelivr.net/npm/pi-verdict@0.15.0/docs/security-principles.md
+[pv-config]: https://cdn.jsdelivr.net/npm/pi-verdict@0.15.0/docs/configuration.md
 
 ### S005: jev-use 💡
 
