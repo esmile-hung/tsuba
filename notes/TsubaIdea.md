@@ -239,6 +239,45 @@ command's effect: destructive operations, data exfiltration, privilege
 escalation, and whether it runs outside the sandbox.
 
 
+## C014: Assessment method 💡
+
+There are several ways to judge whether a tool call is harmful, and different
+situations favour different ones.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C008
+
+The methods differ in cost, latency, and accuracy, and none is universally
+best; the choice depends on how much scrutiny the situation warrants.
+
+### C015: 3rd-party assessment tool 💡
+
+Delegate the judgment to an existing third-party tool or service that already
+assesses tool calls.
+
+Reuses available tooling instead of building a classifier. Trade-off: adds an
+external dependency and its cost and latency, but inherits whatever policy and
+coverage that tool provides.
+
+### C016: Low-cost AI with special prompt 💡
+
+Classify each call with a cheap model driven by a purpose-built prompt.
+
+A small or inexpensive model rates the call against a rubric carried in the
+prompt, tailored per generic tool. Trade-off: moderate cost and latency, with
+quality bound by the prompt and the model's capability.
+
+### C017: Keyword-catcher dumb assessment 💡
+
+Flag calls with a trivial keyword or pattern matcher, kept mainly for testing.
+
+A substring or regex check that catches obviously dangerous tokens without real
+judgment. Not a serious classifier; its value is as a baseline and test
+stand-in so the harness plumbing can be exercised before a smarter method is
+wired in.
+
+
 ## Metaphor
 
 According to [Tsuba](https://en.wikipedia.org/wiki/Japanese_sword_mountings#Tsuba)
