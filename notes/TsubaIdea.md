@@ -653,7 +653,93 @@ References: [pi-verdict][pv], [pi-verdict repo][pv-repo],
 
 ### S005: jev-use 💡
 
-https://github.com/shitianfang/jev-use
+A harness plugin that hands decisions needing no text output to Jev — a
+purpose-built judgment model — and, relevant to Tsuba, wraps it as a gate that
+risk-checks each tool call before it runs.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C004, C005, C006, C008, C014, C015, C016
+
+Supporting analysis for Tsuba's Claude Code (C004), Codex (C005), and Pi
+(C006) integrations, generic tool assessment (C008), assessment method (C014),
+the third-party-assessment-tool option (C015), and the low-cost-AI-with-a-
+prompt option (C016); it does not make the choice.
+
+It is less a full auto-mode gate than the others (S001, S003, S004) and more a
+tooling layer for one judgment model, but it is the reference for that model's
+*wire protocol* and for wrapping a classifier as a gate. Its Jev model is the
+same one S003 and S004 name as a classifier, so this study fills in what that
+model actually is and how it is called.
+
+**Shape.** The project splits decisions by whether they need new text. A
+deterministic router (no request spent) sends writing tasks and open-ended
+judgments to the LLM, and everything enumerable to Jev. It ships several
+surfaces over one engine: two MCP tools (`jev_judge`, `jev_gate`), a CLI
+(`jev-use judge`, `jev-use hook gate`), a Claude Code plugin carrying a
+routing skill, a Codex plugin, and a PreToolUse hook adapter for Claude Code
+and Codex. The install step wires whichever of Claude Code, Codex, and Pi it
+finds.
+
+**The gate.** `jev_gate` takes one proposed action (tool + input, verbatim)
+and returns `allow` / `deny` / `escalate`. The semantics are "tighten only":
+`deny` denies with a reason, an unsure verdict asks, and `allow` stays silent
+so the host's normal permission flow still decides — the gate can never grant
+anything by itself. An unreachable provider never becomes an allow: the tool
+reports `escalate` with reason `unreachable` (proceed as if Jev were absent)
+and the hook defers to the normal flow. On the hook path it spends zero LLM
+tokens on allow — a deny or ask feeds its reason back to the model, which is
+the point — at roughly one ~100 ms round trip per gated call, so the matcher
+is scoped to tools worth gating.
+
+**Assessment.** Jev answers *typed* questions, each a small primitive: `noul`
+(the probability a statement is true), `choice` (one enumerated option), and
+`score` (a position on an ordered list of levels). Questions about one state
+are batched into a single call, and latency is flat in question count
+(measured 1 / 4 / 8 questions ≈ 274 ms). Every verdict carries a confidence
+and a `confidenceFrom` field saying whether it was reported by Jev's own head
+or estimated from the answer distribution, with a per-source escalation
+threshold. The escalation contract is explicit and typed: pre-call reasons
+(`writing`, `open_ended`, `oversized`) come from the deterministic router,
+post-call reasons (`unsure`, `unreachable`) from the model, and every handback
+is a normal verdict with a hint, never an exception — the LLM stays the
+planner and writer. This is the low-cost-model method (C016) expressed as a
+reusable protocol rather than one hard-coded prompt.
+
+**Redaction.** The gated action is the one part of the judged state the user
+did not write, so its credentials are stripped before the call — URL
+passwords, auth and cookie headers, `-u user:pass`, `--token=` / `SECRET=`
+values, and known key shapes become `[redacted]`, while a value that is only a
+reference (`$GITHUB_TOKEN`) is left alone. Everything the verdict depends on
+(the tool, flags, host, path) still goes as-is. This is a concrete answer to
+the privacy concern Tsuba faces when it sends a tool call to a classifier.
+
+**Trust and limits.** It is not a sandbox. The published cost is a *rate* win,
+not a token win — Jev spends more tokens per decision, so the saving is real
+only when the decision leaves the conversation; routing bulk data by reference
+(a file piped to the CLI) is part of the design. The gate only ever tightens,
+so an outage cannot silently grant permission.
+
+**Bearings for Tsuba.** Four takeaways. First, the typed verdict contract
+(`noul` / `choice` / `score`, per-verdict confidence, typed escalation reasons)
+is a cleaner interface than a raw risk score and directly suits C014/C016.
+Second, the deterministic pre-call router — deciding what never reaches the
+model — is a reusable way to keep the classifier off the easy cases. Third,
+credentials-redacted-before-send is worth adopting for any model-backed
+assessment. Fourth, the "tighten only, never grant, defer on failure" gate
+semantics is a third stance between S003's fail-to-prompt and the fail-closed
+contract elsewhere. As a concrete tool it is a strong C015 candidate: Tsuba
+could call `jev_gate` (or the underlying model) rather than build a classifier,
+though that accepts a third-party dependency and sends tool calls to a
+provider.
+
+References: [jev-use][jevu], [reference][jevu-ref],
+[Claude Code harness][jevu-cc], [routing skill][jevu-skill].
+
+[jevu]: https://github.com/shitianfang/jev-use
+[jevu-ref]: https://github.com/shitianfang/jev-use/blob/main/docs/reference.md
+[jevu-cc]: https://github.com/shitianfang/jev-use/blob/main/harness/claude-code/README.md
+[jevu-skill]: https://github.com/shitianfang/jev-use/blob/main/skills/jev-use/SKILL.md
 
 ### S006: jev-skill 💡
 
