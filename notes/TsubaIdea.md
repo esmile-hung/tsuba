@@ -173,6 +173,72 @@ References: [Pi][pi], [Pi extensions][pi-extensions], [Oh My Pi][omp].
 [omp]: https://github.com/can1357/oh-my-pi
 
 
+## C008: Tool assessment 💡
+
+Different AI tools have different protocols, usage, and concerns, so Tsuba
+assesses each kind of typical tool use under a *generic* name rather than by a
+harness-specific tool.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C007
+
+Harnesses name and invoke tools differently — Claude Code's `Read` and
+OpenCode's `read` are the same kind of action, as are Claude Code's `Bash` and
+Codex's shell execution. Assessment is defined once per generic tool so the
+rules are shared across harnesses and only the name mapping stays
+harness-specific.
+
+### C009: glob-tool 💡
+
+File discovery by path pattern.
+
+Examples: Claude Code `Glob`, OpenCode `glob`.
+
+Read-only. Assessment centres on path scope — whether the pattern reaches
+outside the working directory or enumerates sensitive locations. Only file
+names reach the model, not contents.
+
+### C010: grep-tool 💡
+
+Content search across files.
+
+Examples: Claude Code `Grep`, OpenCode `grep`.
+
+Read-only. Assessment centres on path scope and on whether the query would
+surface sensitive material (keys, tokens) into context.
+
+### C011: read-tool 💡
+
+Read a file's contents.
+
+Examples: Claude Code `Read`, OpenCode `read`.
+
+Read-only, but can pull sensitive material (credentials, `.env`, private keys)
+into context. Assessment centres on path scope and on sensitive file patterns.
+
+### C012: edit-tool 💡
+
+Create, overwrite, or patch file contents.
+
+Examples: Claude Code `Edit` / `Write`, OpenCode `edit` / `write` / `patch`,
+Codex `apply_patch`.
+
+A write action. Assessment centres on the target path (inside the project vs
+outside it, or a protected file) and on the nature of the change (destructive
+overwrite vs additive edit).
+
+### C013: exec-tool 💡
+
+Run a shell command.
+
+Examples: Claude Code `Bash`, OpenCode `bash`, Codex `codex exec`.
+
+The highest-risk kind — arbitrary command execution. Assessment centres on the
+command's effect: destructive operations, data exfiltration, privilege
+escalation, and whether it runs outside the sandbox.
+
+
 ## Metaphor
 
 According to [Tsuba](https://en.wikipedia.org/wiki/Japanese_sword_mountings#Tsuba)
