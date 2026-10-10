@@ -453,7 +453,104 @@ References: [cc-safety-net][ccsn], [architecture][ccsn-architecture],
 
 ### S003: pi-automode-classifier 💡
 
-https://github.com/deepu105/pi-automode-classifier
+A Pi auto-mode extension that decides each tool call by deterministic rules
+first and a small classifier model last, prompting the user for the risky
+remainder.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: C006, C008, C014, C016
+
+Supporting analysis for Tsuba's Pi integration (C006), generic tool
+assessment (C008), assessment method (C014), and the low-cost-AI-with-a-prompt
+option (C016); it does not make the choice.
+
+It is the clearest production example of the classifier method (C016) on a Pi
+target, and it shows how the method is pinned to a model and threshold rather
+than left abstract. Built for the same reason as Tsuba — Pi runs every tool
+call without approval, and the author wanted Claude Code's auto mode — it
+differs from S001 in focus: S001 is a broad rule-based auto-mode extension,
+while this one centres on shell-command classification behind a small,
+swappable model.
+
+**Shape.** Three actors decide, in order. Built-in rules parse the shell
+command — including `$(...)`, `bash -c` strings, and `sudo` / `timeout` /
+`uv run` wrappers — and return one of four verdicts: `deny` (blocked, no
+prompt), `ask` (prompt), `allow`, or `classify` (hand to the model). The model
+sees only the `classify` commands and answers one yes/no question with a
+probability; below `askAbove` the command runs, at or above it the user is
+prompted, and if the model cannot answer (down, timeout, over context) the
+user is prompted too. The model never blocks anything by itself. Like S001, it
+is not a sandbox and does not guard the user's own `!` commands.
+
+**Assessment.** This is the low-cost-model method (C016) in concrete form. The
+classifier is swappable across three shapes: a local llama.cpp server (Kev
+0.8B, Laya, Julia-1), a hosted model through Pi's own model registry (Jev from
+TypeSafe, over OpenRouter), or an arbitrary process speaking a JSON
+line protocol on stdin/stdout (LANCET Nano). `askAbove` is tuned per model,
+and `classifier.model` is pinned so a silently swapped model forces every
+classify command to a prompt rather than answering with another model's
+threshold. The prompt itself is a rubric — a main yes/no question with `risky`
+and `safe` descriptions, optionally replaced by graded `levels`, plus optional
+`extraQuestions` each with its own `askAbove`. It carries its own 50-command
+benchmark and reports AUC per model, and it documents that its author wrote
+the benchmark while writing the rules — a sanity check, not an accuracy
+claim.
+
+**Tool routing.** `bash` (and any tool with a string `command`) goes through
+the rules and model. `write` and `edit` are allowed inside the working
+directory and ask outside it. `read` and `grep` are not checked except for
+credential files: a read-only `cat ~/.aws/credentials` still asks, because the
+contents reach the transcript. Credential detection is by path (any home,
+`.ssh`, `.aws`, keyrings, shell history, `/etc/shadow`) and by name (`.env`
+variants, `id_rsa`, `*.pem`, `*.key`, `secrets.yaml`, service-account JSON);
+naming-only commands (`ls`, `stat`, `test -f`, `chmod`) and writes do not
+ask. The working directory is the Pi run directory plus its git checkout and
+existing worktrees.
+
+**Script provenance.** Because `./scripts/build.sh` says nothing about what it
+does, the rules judge by where the file came from: a project file or a
+script the agent wrote this session runs; a file `curl` / `wget` saved this
+session asks; inline code, new files of another repo, and any script with
+`deploy` / `publish` / `release` / `upload` / `prod` go to the model. This
+provenance rule is a notable refinement over a pure path-scope check.
+
+**Prompts and learning.** Every prompt offers *Allow once*, *Allow for this
+session*, and *Block*. Two kinds widen the choice so the next similar call is
+not asked again: an unknown command is offered a pattern with its subcommand
+or first flag (`Allow "terraform plan *" for this session`, optionally saved to
+config), and an out-of-directory change is offered the whole folder. Inline
+code and the built-in ask rules are never offered a pattern. Rules can also be
+supplied as `deny` / `ask` / `classify` / `allow` patterns, matched per simple
+command (not the whole line), with the most severe match winning and
+`allow` rules unable to override the built-in denies, the extension's
+own-file prompt, or out-of-directory redirects.
+
+**Trust and limits.** No UI (print mode, most subagents) means there is nobody
+to ask, so those calls are blocked by default (`withoutUi` can be set to
+`allow`). The model sees only the command and the working directory, so it
+cannot tell whether the user asked for the action. Script files are never
+read. Paths or programs held in shell variables cannot be resolved, so they
+ask or go to the model. Long commands always prompt — and a bigger context
+does not help, as the author measured a 3,700-character `rm -rf ~/Documents`
+tail scoring 0.15. Credential detection is path-and-name only, so `openssl
+pkey -in server.key` asks and `printenv` is missed. Only English commands and
+paths were tested.
+
+**Bearings for Tsuba.** Three takeaways. First, this is the C016 method
+operationalized for a Pi target (C006), so it is the closest reference to
+Tsuba's likely Pi integration plus classifier. Second, the swappable-backend
+design — local server, hosted registry model, or external process — is a clean
+way to keep the assessment method (C014) and the concrete tool (C015) separate
+from the harness integration. Third, its ordering (certain rules first, model
+only on the residue, prompt on model failure) matches S001 and cc-safety-net,
+which strengthens that as the shape Tsuba should adopt; its fail-to-prompt
+behaviour on model failure is a deliberate fail-safe rather than the
+fail-closed contract the other studies use.
+
+References: [pi-automode-classifier][pac].
+
+[pac]: https://github.com/deepu105/pi-automode-classifier
 
 ### S004: pi-verdict 💡
 
