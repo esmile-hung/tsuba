@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "jeffhung-claude-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "jeffhung/claude-marketplace"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "dev-notes@jeffhung-claude-marketplace": true
+  }
+}
