@@ -1141,6 +1141,172 @@ References: [jev-mcp][jm], [hook gate][jmh], [skill][jms].
 [jmh]: https://github.com/jkudish/jev-mcp/blob/main/examples/hook-gate.md
 [jms]: https://github.com/jkudish/jev-mcp/blob/main/skills/jev/SKILL.md
 
+### S010: Prior-art comparison 💡
+
+A side-by-side comparison of the nine prior arts (S001–S009) on the
+dimensions Tsuba must decide: harness reach, assessment method, verdict
+shape, failure direction, model context, tool coverage, and self-protection.
+
+> [!NOTE]
+> **Metadata**
+> - **Related**: S001, S002, S003, S004, S005, S006, S007, S008, S009, C002, C007, C008, C014, C015, C016, C017
+
+Supporting analysis that consolidates S001–S009 for Tsuba's harness
+integration (C002, C007), tool assessment (C008), and assessment method
+(C014–C017); it does not make the choice.
+
+**Overview.** Seven of the nine are tool-call gates. S006 is an advisory skill
+collection, and S005 and S009 are judgment-model tooling that each also ship
+a gate. Five are Pi-only or Pi-first; only S002 and S009 reach Claude Code,
+Codex, OpenCode, and Pi together.
+
+| Study | Kind | Claude Code | Codex | OpenCode | Pi | Oh My Pi | Other |
+|-------|------|:-:|:-:|:-:|:-:|:-:|-------|
+| S001 pi-automode | Gate extension | – | – | – | ✓ | – | – |
+| S002 cc-safety-net | Static gate | ✓ | ✓ | ✓ | ✓ | – | Amp + 11 more |
+| S003 pi-automode-classifier | Gate extension | – | – | – | ✓ | – | – |
+| S004 pi-verdict | Gate extension | – | – | – | ✓ | ✓ (0.12.x line) | – |
+| S005 jev-use | Model tooling + gate | ✓ | ✓ | – | ✓ | – | MCP, CLI |
+| S006 jev-skill | Advisory skills | skill | skill | skill | – | – | CLI |
+| S007 pi-jev | Gate extension | – | – | – | ✓ | – | – |
+| S008 jev-shield | MCP firewall + hooks | ✓ | MCP proxy | ✓ | ✗ | – | any MCP client |
+| S009 jev-mcp | MCP server + hook recipe | ✓ | ✓ | ✓ | ✓ | – | Amp, HTTP |
+
+**Assessment method (C014).** Every gate puts a deterministic layer before
+the model. They differ in how strong that layer is and in which model judges
+the residue.
+
+| Study | Deterministic layer (C017 / parser) | Model layer (C016) | Third-party (C015) |
+|-------|-------------------------------------|--------------------|--------------------|
+| S001 | Permission rules, `unbash` parse, hard-deny, path-deny, read-only fast path | Any model; 1-token filter → structured `classifier_decision` | – |
+| S002 | Full POSIX / PowerShell semantic parser, per-command analyzers, 138 secret rules | None | Is itself a C015 candidate |
+| S003 | Shell parser with wrappers, script provenance | Small swappable model (local llama.cpp, Pi registry, stdio process); yes/no probability | Jev, Kev, LANCET as backends |
+| S004 | Regex deny floor, path tiers S0–S5, user regexes, `denyPaths` | Session model by default, or pinned / Jev native `classify()` | Jev optional |
+| S005 | Router decides what never reaches the model | Jev typed primitives (`noul` / `choice` / `score`) | Jev |
+| S006 | – | Jev, advisory only | Jev |
+| S007 | – | Jev, 4 batched questions (destructive, exfiltration, beyond-scope, impact) | Jev |
+| S008 | Recipient allowlists, required flags | Jev semantic battery + session taint | Jev via Vercel AI Gateway |
+| S009 | Harness matcher, `--skip` regexes, 4,000-char cap | One `jev_decide` call with escape hatches | Jev, pluggable provider |
+
+**Verdict shape.** Three families exist: a binary allow/deny, a three-state
+verdict with `ask`, and a "tighten only" gate that can deny but never grants.
+
+| Study | Verdicts the gate can return | Can the model itself return `ask`? | Never grants by itself? |
+|-------|------------------------------|:-:|:-:|
+| S001 | allow / block (ask from `permissions.ask`) | – | – |
+| S002 | deny / pass | n/a | ✓ |
+| S003 | deny / ask / allow / classify → score vs `askAbove` | via threshold | – |
+| S004 | allow / ask / deny | ✓ | – |
+| S005 | deny / escalate (ask) / silent allow | ✓ (`escalate`) | ✓ |
+| S007 | notify (shadow) or ask (enforce) | – | ✓ |
+| S008 | deny / ask; redact results | via thresholds | ✓ |
+| S009 | deny / defer (ask on Claude Code) | ✓ (`ask_user`) | ✓ |
+
+**Failure direction.** This is the widest divergence in the set, and S007
+names it as a decision Tsuba must make on purpose.
+
+| Stance | Studies | Behaviour on model or guard failure |
+|--------|---------|-------------------------------------|
+| Fail-closed | S001, S004, S002 (guard errors) | Block the call |
+| Fail-to-prompt | S003 | Ask the user; block when no UI |
+| Defer (tighten-only) | S005, S009 | Emit no verdict; harness's own permission flow decides |
+| Fail-open | S007, S008 (default; `JEV_FAIL_MODE=closed` available), S002 (config errors, some hosts) | Let the call run |
+
+**Model context.** What the classifier sees sets how well it can judge
+"beyond what the user asked" and what leaves the machine.
+
+| Study | Sent to the model | Privacy measure |
+|-------|-------------------|-----------------|
+| S001 | Tool call + prose policy | Model is user-selectable |
+| S002 | Nothing (no model) | Local only |
+| S003 | Command + working directory only | Local model option |
+| S004 | Recent user intent + prior tool calls | Protected path names withheld |
+| S005 | Tool + input verbatim | Credentials redacted before send |
+| S007 | cwd, tool, last user message (1,200 chars), args (400 chars) | Truncation; "what leaves" accounting; `gate.tools: ["bash"]` |
+| S008 | Call, result, tool descriptions | ~32k-token budget truncation |
+| S009 | Tool call framed as untrusted facts + policy priorities | Size cap; skip regexes |
+
+**Tool coverage (C008–C013).** Most gates focus on exec-tool and edit-tool.
+Reads are treated as low risk except for credential paths. Only S007 and S008
+assess *after* the call.
+
+| Study | exec (C013) | edit (C012) | read / grep / glob (C009–C011) | Post-call |
+|-------|-------------|-------------|--------------------------------|-----------|
+| S001 | Rules → model | Rules → model | Read-only fast path; path-deny | – |
+| S002 | Semantic parse | Secret / path rules | Secret-path rules | – |
+| S003 | Rules → model | Allow in cwd, ask outside | Credential paths only | – |
+| S004 | Regex floor → model | Path tiers → model | Path tiers (file tools only) | – |
+| S005 | Matcher-scoped | Matcher-scoped | Matcher-scoped | – |
+| S007 | Jev | Jev | Not judged (cost) | Output judge (secrets, failure class) |
+| S008 | Jev | Jev | Exempt | Result injection / secrets; taint |
+| S009 | Matcher-scoped | Matcher-scoped | Matcher-scoped | Advisory tools only |
+
+**Governance and evidence.**
+
+| Study | Self-protection | Config trust | Calibration evidence |
+|-------|-----------------|--------------|----------------------|
+| S001 | – | Shared project file can only tighten | – |
+| S002 | Policy files and Git metadata, before config loads | Custom rules additive only | – |
+| S003 | Own-file prompt | Allow cannot override built-in denies | 50-command benchmark, AUC per model |
+| S004 | Own files hard-deny + tamper detection with auto-restore | No built-in allowlist | Lab notes: 1.2k verdicts, 746 commands |
+| S006 | – | – | 24-record pilot (not production accuracy) |
+| S007 | Key scrubbed from notifications | User + project, project wins | Smoke calibration with measured bands |
+| S008 | Kill switch only | Policy in code, not prompt | Demo (10 calls) |
+| S009 | – | Pinned model | Prescribed threshold-sweep method |
+
+**Convergent patterns.** These hold across most studies and are safe defaults
+for Tsuba:
+
+1. **Deterministic first, model last.** Cheap, explainable rules decide; the
+   model sees only the residue (S001, S003, S004, S008, S009).
+2. **Not a sandbox.** Every study says it is a policy gate or a signal layer,
+   not a security boundary, and none guards the user's own `!` commands.
+3. **Configuration can only tighten.** Shared or project config cannot loosen
+   the built-in floor (S001, S002, S003, S004).
+4. **Typed, thresholded verdicts.** Model output is a probability, choice, or
+   score that code branches on, never parsed prose (S001, S005, S007, S009).
+5. **Pin the model with its thresholds.** A threshold is valid for one model
+   only (S003, S007, S009).
+
+**Open divergences.** These are the decisions the prior art does not settle:
+
+1. **Failure direction** — fail-closed, fail-to-prompt, defer, or fail-open.
+2. **Model context** — command only (S003) versus conversation intent (S004,
+   S007). Intent is necessary to judge "beyond scope", but it increases what
+   leaves the machine.
+3. **`ask` as a model verdict** — first-class (S004, S005, S009) versus a
+   threshold on a score (S003, S008).
+4. **Assessment boundary** — pre-call only versus post-call result screening
+   and taint (S007, S008).
+5. **Local versus hosted model** — only S003 offers a local backend; the Jev
+   family (S004–S009) sends tool calls to a provider.
+
+**Gaps Tsuba can fill.** No single prior art combines all of: a strong
+deterministic parser (S002), a model classifier for the residue, coverage of
+Claude Code, Codex, OpenCode, Pi, *and* Oh My Pi, and a deliberate failure
+policy. S002 has the reach but no model. S009 has the reach and a model but
+only as a recipe, with a regex-only deterministic layer. S008 is the most
+finished product but does not cover Pi. Only S004 addresses Oh My Pi, and only
+through a separate version line.
+
+**Bearings for Tsuba.** A composite design falls out of the comparison, each
+part with a proven source:
+
+| Tsuba part | Borrow from |
+|------------|-------------|
+| Per-harness adapters, shared guard (C007) | S002 four integration models; S009 Pi / Codex / OpenCode runners |
+| Deterministic layer (C017 → parser) | S002 as a C015 dependency, or S001 `unbash` approach |
+| Classifier for the residue (C016) | S001 two-stage filter; S009 `jev_decide` with escape hatches |
+| Verdict and failure contract | S009 "deny only on confidence, otherwise defer"; S004 three-state verdict |
+| Assessment dimensions (C008) | S007 four questions; S006 / S009 plan-vs-action and claim checks |
+| Privacy | S005 redaction; S007 "what leaves" accounting and truncation |
+| Self-protection | S004 own-file hard-deny and tamper detection; S002 policy-before-config ordering |
+| Calibration | S007 band-and-gap method; S009 threshold sweep; S006 pitfalls |
+
+The main adopt-versus-build question is S008 (finished, no Pi) and S009 (ready
+Pi adapter, recipe-grade). Tsuba's clearest differentiation is full
+Pi / Oh My Pi coverage plus a parser-grade deterministic floor in one package.
+
 
 ## Metaphor
 
